@@ -1,0 +1,9 @@
+.vscode/
+log/
+picture/
+root/
+
+.clang-format
+.gdbinit
+
+*.o
