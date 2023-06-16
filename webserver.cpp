@@ -1,5 +1,7 @@
 #include "webserver.h"
 
+#include <nana/gui.hpp>
+
 
 WebServer::WebServer() {
   users = new http_conn[MAX_FD];
@@ -66,12 +68,14 @@ void WebServer::sql_pool() {
 }
 
 // 初始化日志
-void WebServer::log_write() {
+void WebServer::log_write(nana::textbox *log_box) {
+  m_log_box = new nana::textbox;
+  m_log_box = log_box;
   if (m_close_log == 0) {
     if (m_log_write == 1)
-      Log::get_instance()->init("./log/ServerLog.log", m_close_log, 2000, 800000, 800);
+      Log::get_instance()->init("./log/ServerLog.log",m_log_box, m_close_log, 2000, 800000, 800);
     else
-      Log::get_instance()->init("./log/ServerLog.log", m_close_log, 2000, 800000, 0);
+      Log::get_instance()->init("./log/ServerLog.log", m_log_box,m_close_log, 2000, 800000, 0);
   }
 }
 

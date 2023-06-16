@@ -12,8 +12,13 @@
 #include <time.h>
 #include <pthread.h>
 
+#include <nana/gui.hpp>
+#include <nana/gui/widgets/textbox.hpp>
+#include <nana/gui/widgets/form.hpp>
+
 #include "block_queue.h"
 
+using namespace nana;
 class Log {
 private:
   Log();
@@ -27,7 +32,7 @@ public:
   static void *flush_log_thread(void *args);
 
   // 可选择的参数有日志文件、日志缓冲区大小、最大行数以及最长日志条队列
-  bool init(const char *file_name, int close_log, int log_buf_size = 8192, int split_lines = 5000000, int max_queue_size = 0);
+  bool init(const char *file_name, textbox *log_box, int close_log, int log_buf_size = 8192, int split_lines = 5000000, int max_queue_size = 0);
 
   void write_log(int level, const char *format, ...);
 
@@ -49,6 +54,7 @@ private:
   bool                      m_is_async;      // 是否同步标志位
   locker                    m_mutex;
   int                       m_close_log;     // 关闭日志标志位
+  textbox                  *m_log_box;
 };
 
 #define LOG_DEBUG(format, ...)                                                                                                                       \

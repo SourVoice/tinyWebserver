@@ -22,6 +22,9 @@
 #include <sys/wait.h>
 #include <sys/uio.h>
 
+#include <nana/gui.hpp>
+#include <nana/gui/widgets/textbox.hpp>
+
 #include "CGImysql/sql_connection_pool.h"
 #include "http/http_conn.h"
 #include "locker/locker.h"
@@ -51,7 +54,8 @@ public:
 
   void sql_pool();
 
-  void log_write();
+  void log_write(nana::textbox *log_box);
+  nana::textbox *m_log_box;
 
   void trig_mode();
 

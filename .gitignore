@@ -1,9 +1,11 @@
 .vscode/
 log/
 picture/
-root/
+tools/
+test/
 
 .clang-format
 .gdbinit
 
 *.o
+*.drawio

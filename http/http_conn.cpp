@@ -227,9 +227,12 @@ http_conn::HTTP_CODE http_conn::process_read() {
   char       *text;
 
   auto legal_stete = [&line_status, &ret, this]() -> bool {
-    bool fir = this->m_check_state == CHECK_STATE_CONTENT && line_status == LINE_OK;
+    bool content = this->m_check_state == CHECK_STATE_CONTENT && line_status == LINE_OK;
+    // CONTENT解析时, 不使用parse_line函数
+    if (content)
+      return true;
     bool second = (line_status = parse_line()) == LINE_OK;
-    return fir || second;
+    return content || second;
   };
 
   while (legal_stete() == true) {
@@ -402,10 +405,9 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char *text) {
   // 仅支持http/1.1
   if (strcasecmp(version, "HTTP/1.1") != 0)
     return BAD_REQUEST;
-  else 
-  {
+  else {
     m_version = new char[200];
-    strncat(m_version, "HTTP/1.1", strlen("HTTP/1.1"));
+    memcpy(m_version, version, strlen(version));
   }
 
   /* 切片url */
@@ -476,6 +478,8 @@ http_conn::HTTP_CODE http_conn::parse_content(char *text) {
   return NO_REQUEST;
 }
 
+char *http_conn::get_line() { return m_read_buf + m_start_line; }
+
 // 采用内存映射, 将文件映射至m_file_address处
 // TODO: 分析请求的url
 http_conn::HTTP_CODE http_conn::do_request() {
@@ -499,12 +503,12 @@ http_conn::HTTP_CODE http_conn::do_request() {
     strncpy(m_real_file + len, m_real_url, FILENAME_LEN - len + 1);
     free(m_real_url);
 
-    // 获取密码和用户, m_string = "user=xxx&passwd=xxx.."
+    // 获取密码和用户, m_string = "user=xxx&password=xxx.."
     string user, passwd;
     int    i = 5;
     while (m_string[i] != '&')
       user.push_back(m_string[i++]);
-    i += 7;
+    i += 10;
     while (m_string[i] != '\0')
       passwd.push_back(m_string[i++]);
 
@@ -532,10 +536,29 @@ http_conn::HTTP_CODE http_conn::do_request() {
 
     // 登录校验
     if (request_flag == '2') {
-      if (users.find(user) != users.end() && users[user] == passwd)
-        strcpy(m_url, "/welcome.html");
-      else
-        strcpy(m_url, "/logError.html");
+      // 优先使用users表
+      if (users.find(user) != users.end()) {
+        if (users[user] == passwd)
+          strcpy(m_url, "/welcome.html");
+        else
+          strcpy(m_url, "/logError.html");
+      }
+
+      // 其次使用数据库
+      if (users.find(user) == users.end()) {
+        string query = "INSERT INTO user(username, passwd) VALUES('" + user + "', '" + passwd + "')";
+        m_lock.lock();
+        int ret = mysql_query(mysql, query.c_str());
+
+        if (!ret) {  // 执行成功返回0
+          users.insert({user, passwd});
+          strcpy(m_url, "/welcome.html");
+          m_lock.unlock();
+        } else {
+          strcpy(m_url, "/logError.html");
+          m_lock.unlock();
+        }
+      }
     }
   }
 
@@ -596,8 +619,6 @@ http_conn::HTTP_CODE http_conn::do_request() {
   close(fd);
   return FILE_REQUEST;
 }
-
-char *http_conn::get_line() { return m_read_buf + m_start_line; }
 
 void http_conn::unmap() {
   if (m_file_address) {

@@ -19,7 +19,7 @@ Log *Log::get_instance() {
 void *Log::flush_log_thread(void *args) { return Log::get_instance()->async_write_log(); }
 
 // 异步需要设置阻塞队列长度
-bool Log::init(const char *file_name, int close_log, int log_buf_size, int split_lines, int max_queue_size) {
+bool Log::init(const char *file_name, textbox *log_box, int close_log, int log_buf_size, int split_lines, int max_queue_size) {
   if (max_queue_size >= 1) {
     m_is_async = true;  // 设置写入方式flag
     m_log_queue = new block_queue<std::string>(max_queue_size);
@@ -31,6 +31,7 @@ bool Log::init(const char *file_name, int close_log, int log_buf_size, int split
   m_buf = new char[m_log_buf_size];
   memset(m_buf, '\0', m_log_buf_size);
   m_split_lines = split_lines;
+  m_log_box = log_box;
 
   time_t     t = time(NULL);
   struct tm *sys_tm = localtime(&t);
@@ -44,10 +45,11 @@ bool Log::init(const char *file_name, int close_log, int log_buf_size, int split
   if (p == nullptr) {
     snprintf(log_full_name, 255, "%d_%02d_%02d_%s", my_tm.tm_year + 1900, my_tm.tm_mon + 1, my_tm.tm_mday, file_name);
   } else {
-    memcpy(log_name, p + 1, strlen(p + 1));          // file_name的去掉/后的名字加入log_name
+    memcpy(log_name, p + 1, strlen(p + 1));           // file_name的去掉/后的名字加入log_name
     strncpy(dir_name, file_name, p - file_name + 1);  // 日志所在目录的位置
-    int ret = snprintf(log_full_name, sizeof(log_full_name), "%s%d_%02d_%02d_%s", dir_name, my_tm.tm_year + 1900, my_tm.tm_mon + 1, my_tm.tm_mday, log_name);
-    if(ret < 0) {
+    int ret = snprintf(log_full_name, sizeof(log_full_name), "%s%d_%02d_%02d_%s", dir_name, my_tm.tm_year + 1900, my_tm.tm_mon + 1, my_tm.tm_mday,
+                       log_name);
+    if (ret < 0) {
       assert(ret >= 0);
     }
   }
@@ -95,13 +97,13 @@ void Log::write_log(int level, const char *format, ...) {
   //  文件创建
   // 日志不是今天或写入的日志行数是最大行的倍数
   if (m_today != my_tm.tm_mday || m_count % m_split_lines == 0) {
-    char new_log[256] = {0};
+    char new_log[278] = {0};
     fflush(m_fp);  // m_fp缓冲区内容输入到文件
     fclose(m_fp);
     char tail[16] = {0};
 
     int ret = snprintf(tail, sizeof(tail), "%d_%02d_%02d_", my_tm.tm_year + 1900, my_tm.tm_mon + 1, my_tm.tm_mday);
-    if(ret < 0) {
+    if (ret < 0) {
       assert(ret >= 0);
     }
     // 时间不为今天, 则创建今天的日志, 更新m_today和m_count
@@ -112,7 +114,7 @@ void Log::write_log(int level, const char *format, ...) {
     } else {
       // 超过最大行, 在之前的日志名基础上加后缀m_split_lines
       int ret = snprintf(new_log, sizeof(new_log), "%s%s%s.%lld", dir_name, tail, log_name, (m_count % m_split_lines));
-      if(ret < 0) {
+      if (ret < 0) {
         assert(ret >= 0);
       }
     }
@@ -144,6 +146,7 @@ void Log::write_log(int level, const char *format, ...) {
   } else {  // 同步写入加锁
     m_mutex.lock();
     fputs(log_str.c_str(), m_fp);
+    // m_log_box->append(log_str, true);
     m_mutex.unlock();
   }
 
@@ -163,6 +166,7 @@ void *Log::async_write_log() {
   while (m_log_queue->pop(single_log)) {
     m_mutex.lock();
     fputs(single_log.c_str(), m_fp);
+    // m_log_box->append(single_log, true);
     m_mutex.unlock();
   }
   char *ptr = new char[1];
